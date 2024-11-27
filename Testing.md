@@ -1,5 +1,5 @@
 # Testing
-<div style="font-size: 1.5rem; display: flex; justify-content: space-around;">
+<div id='top' style="font-size: 1.5rem; display: flex; justify-content: space-around;">
 	<a href='#frontend'>Frontend</a> |
 	<a href='#backend'>Backend</a> |
 	<a href='#end-to-end'>End-to-End</a>
@@ -110,6 +110,9 @@ Add to package.json:
 ```
 
 In the client folder `bun run test` and that's it.
+
 ## Backend
+<a href='#top'>Back to top</a>
 
 ## End-to-End
+<a href='#top'>Back to top</a>
