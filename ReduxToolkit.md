@@ -402,3 +402,302 @@ export const TodoComponent = ({ todo }: TodoComponentProps) => {
 };
 
 ```
+
+## Async Logic and Data Fetching
+- Create `store/withTypes.ts` file for AsyncThunk:
+```ts
+import { createAsyncThunk } from "@reduxjs/toolkit";
+
+import type { RootState, AppDispatch } from "./store";
+
+// Create a pre-typed `createAsyncThunk` function
+export const createAppAsyncThunk = createAsyncThunk.withTypes<{
+	state: RootState,
+	dispatch: AppDispatch,
+}>();
+```
+
+- Update `features/todos/todosSlice.ts` with TodosState:
+```ts
+...
+interface TodosState {
+  todos: Todo[];
+  status: "idle" | "pending" | "succeeded" | "failed";
+  error: string | null;
+}
+
+// Updated initial state with the new TodosState interface
+const initialState: TodosState = {
+  todos: [],
+  status: "idle",
+  error: null,
+};
+
+const todosSlice = createSlice({
+  name: "todos",
+  initialState,
+  reducers: {
+    addTodo: {
+      reducer(state, action: PayloadAction<Todo>) {
+        state.todos.push(action.payload);
+      },
+      ...
+    },
+    updateTodo(state, action: PayloadAction<Todo>) {
+      const { id, done } = action.payload;
+      const existingTodo = state.todos.find((todo) => todo.id === id); // Finds the correct todo by ID
+
+      ...
+    },
+    deleteTodo(state, action: PayloadAction<number | string>) {
+      const id = action.payload;
+      state.todos = state.todos.filter((todo) => todo.id !== id);
+    },
+  },
+});
+
+...
+
+// Helper state selectors
+export const findTodos = (state: RootState) => state.todos.todos;
+export const findTodoById = (state: RootState, id: number | string) =>
+  state.todos.todos.find((todo) => todo.id === id);
+export const todosStatus = (state: RootState) => state.todos.status;
+export const todosError = (state: RootState) => state.todos.error;
+
+```
+
+- Fetching Data with `createAsyncThunk`. Update `features/todos/todosSlice.ts`:
+```ts
+import axios from "axios";
+...
+interface TodosState {
+  todos: Todo[];
+  status: "idle" | "pending" | "succeeded" | "failed";
+  error: string | null;
+}
+
+const URL = 'http://localhost:3001'
+
+export const fetchTodos = createAppAsyncThunk("todos/fetchTodos", async () => {
+  const response = await axios.get<Todo[]>(`${URL}/api/todos`);
+  return response.data;
+});
+
+// Updated initial state with the new TodosState interface
+const initialState: TodosState = {
+  todos: [],
+  status: "idle",
+  error: null,
+};
+
+```
+
+- Add cases to `todosSlice.ts`:
+```ts
+const todosSlice = createSlice({
+  name: "todos",
+  initialState,
+  reducers: {
+    ...
+    deleteTodo(state, action: PayloadAction<number | string>) {
+      const id = action.payload;
+      state.todos = state.todos.filter((todo) => todo.id !== id);
+    },
+  },
+  extraReducers: (builder) => {
+    builder
+      .addCase(fetchTodos.pending, (state) => {
+        state.status = "pending";
+      })
+      .addCase(fetchTodos.fulfilled, (state, action) => {
+        state.status = "succeeded";
+        state.todos.push(...action.payload);	// Add any fetched todos to the array
+      })
+			.addCase(fetchTodos.rejected, (state, action) => {
+				state.status = "failed";
+				state.error = action.error.message ?? 'Unknown error';
+			})
+  },
+});
+...
+```
+
+- Use the fetchTodos in the `TodoList.tsx` component:
+```tsx
+import "./TodoList.css";
+
+import { useEffect } from "react";
+
+import {
+  fetchTodos,
+  findTodos,
+  todosStatus,
+} from "../../features/todos/todosSlice";
+import { useAppDispatch, useAppSelector } from "../../store/hooks";
+import { TodoComponent } from "./TodoComponent";
+
+export const TodoList = () => {
+  const dispatch = useAppDispatch();
+  const todos = useAppSelector(findTodos); // Gets the todos from the Redux store
+  const todoStatus = useAppSelector(todosStatus); // Gets the status of the todos from the Redux store
+
+  // To prevent re-renders we start fetching when the status is idle
+  useEffect(() => {
+    if (todoStatus === "idle") {
+      dispatch(fetchTodos());
+    }
+  }, [dispatch, todoStatus]);
+
+  return (
+    <div className="todo-list" data-testid="todo-list">
+      {todos.map((todo) => (
+        <TodoComponent key={todo.id} todo={todo} />
+      ))}
+    </div>
+  );
+};
+
+```
+
+- Double check to prevent re-renders in `todosSlice.ts`:
+```ts
+...
+// Condition double checks that there is no re-renders
+export const fetchTodos = createAppAsyncThunk(
+  "todos/fetchTodos",
+  async () => {
+    const response = await axios.get<Todo[]>(`${URL}/api/todos`);
+    return response.data;
+  },
+  {
+    condition(_arg, thunkApi) {
+      const status = todosStatus(thunkApi.getState());
+      if (status !== "idle") {
+        return false;
+      }
+    },
+  },
+);
+
+```
+
+- Update the fetch to match the backend response type `todosSlice.ts`:
+```ts
+interface TodoApiResponse {
+  data: Todo[];
+  ok: boolean;
+  message: string;
+}
+
+...
+
+// Condition double checks that there is no re-renders
+export const fetchTodos = createAppAsyncThunk(
+  "todos/fetchTodos",
+  async () => {
+    const response = await axios.get<TodoApiResponse>(`${URL}/api/todos`);
+    return response.data.data;
+  },
+  {
+    condition(_arg, thunkApi) {
+      const status = todosStatus(thunkApi.getState());
+      if (status !== "idle") {
+        return false;
+      }
+    },
+  },
+);
+```
+
+- Adding the new Todos `todosSlice.ts`:
+```ts
+...
+type NewTodo = Pick<Todo, "content">;
+...
+export const addNewTodo = createAppAsyncThunk(
+  "todos/addNewTodo",
+  async (initialTodo: NewTodo) => {
+    const response = await axios.post<Todo>(`${URL}/api/todos`, initialTodo);
+    return response.data;
+  },
+);
+...
+// Remove the addTodo from the reducers
+const todosSlice = createSlice({
+  name: "todos",
+  initialState,
+  reducers: {
+    ...
+  },
+  extraReducers: (builder) => {
+    builder
+      ...
+      .addCase(addNewTodo.fulfilled, (state, action) => {
+        state.todos.push(action.payload);
+      });
+  },
+});
+
+export const { updateTodo, deleteTodo } = todosSlice.actions;
+...
+
+```
+
+- Update the `Homepage.tsx`:
+```tsx
+
+```
+
+
+## RTK Query Basics
+- Create apiSlice in `features/api/apiSlice.ts`:
+```ts
+// RTK Query methods
+import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+
+// Use the `Todo` type from the `types.ts` file
+// and the re-export it for ease of use
+import { Todo } from "../../utils/types";
+
+export type { Todo };
+
+// Define single API slice object
+export const apiSlice = createApi({
+  reducerPath: "api", // The cache reducer expects to be added at `state.api` by default
+  baseQuery: fetchBaseQuery({ baseUrl: "/" }), // Base URL for all requests
+  // Define the endpoints
+  endpoints: (builder) => ({
+    // The return value is a `Todo[]` array and it takes no arguments
+    getTodos: builder.query<Todo[], void>({
+      query: () => "/todos", // The endpoint URL
+    }),
+  }),
+});
+
+// Export the auto-generated hooks for the API endpoints
+export const { useGetTodosQuery } = apiSlice;
+
+```
+
+- Update `store/store.ts`:
+```ts
+import { configureStore } from "@reduxjs/toolkit";
+
+import { apiSlice } from "../features/api/apiSlice";
+import todosReducer from "../features/todos/todosSlice";
+
+export const store = configureStore({
+  reducer: {
+    todos: todosReducer,
+    [apiSlice.reducerPath]: apiSlice.reducer,
+  },
+  middleware: (getDefaultMiddleware) =>
+    getDefaultMiddleware().concat(apiSlice.middleware),
+  devTools: import.meta.env.NODE_ENV !== "production",
+});
+
+export type AppStore = typeof store;
+export type AppDispatch = typeof store.dispatch; // Infer the `AppDispatch` type from the store itself
+export type RootState = ReturnType<typeof store.getState>; // Same for the `RootState` type
+```
