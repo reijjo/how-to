@@ -767,32 +767,43 @@ export const TodoComponent = ({ todo }: TodoComponentProps) => {
 
 
 ## RTK Query Basics
+- And now lets get rid of the thunks when we got all ready
 - Create apiSlice in `features/api/apiSlice.ts`:
 ```ts
 // RTK Query methods
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 
+import { config } from "../../utils/config";
 // Use the `Todo` type from the `types.ts` file
 // and the re-export it for ease of use
-import { Todo } from "../../utils/types";
+import { Todo, TodosResponse } from "../../utils/types";
 
 export type { Todo };
+const { URL } = config;
 
 // Define single API slice object
 export const apiSlice = createApi({
   reducerPath: "api", // The cache reducer expects to be added at `state.api` by default
-  baseQuery: fetchBaseQuery({ baseUrl: "/" }), // Base URL for all requests
+  baseQuery: fetchBaseQuery({ baseUrl: `${URL}/api` }), // Base URL for all requests
   // Define the endpoints
   endpoints: (builder) => ({
     // The return value is a `Todo[]` array and it takes no arguments
     getTodos: builder.query<Todo[], void>({
       query: () => "/todos", // The endpoint URL
+			// We need the transformResponse because our API returns an object with a `data` key
+      transformResponse: (response: TodosResponse) => {
+        return response.data;
+      },
+    }),
+    getTodoById: builder.query<Todo, number>({
+      query: (id) => `/todos/${id}`,
     }),
   }),
 });
 
 // Export the auto-generated hooks for the API endpoints
-export const { useGetTodosQuery } = apiSlice;
+export const { useGetTodosQuery, useGetTodoByIdQuery } = apiSlice;
+
 
 ```
 
@@ -801,11 +812,11 @@ export const { useGetTodosQuery } = apiSlice;
 import { configureStore } from "@reduxjs/toolkit";
 
 import { apiSlice } from "../features/api/apiSlice";
-import todosReducer from "../features/todos/todosSlice";
+import todoReducer from "../features/todos/todosSlice";
 
 export const store = configureStore({
   reducer: {
-    todos: todosReducer,
+    todos: todoReducer,
     [apiSlice.reducerPath]: apiSlice.reducer,
   },
   middleware: (getDefaultMiddleware) =>
@@ -816,4 +827,96 @@ export const store = configureStore({
 export type AppStore = typeof store;
 export type AppDispatch = typeof store.dispatch; // Infer the `AppDispatch` type from the store itself
 export type RootState = ReturnType<typeof store.getState>; // Same for the `RootState` type
+
+```
+
+- Clean up `todosSlice.ts`:
+```ts
+import { createSlice } from "@reduxjs/toolkit";
+
+import { RootState } from "../../store/store";
+import { Todo } from "../../utils/types";
+import { apiSlice } from "../api/apiSlice";
+
+type TodosState = {
+  list: Todo[];
+  status: "idle" | "pending" | "succeeded" | "failed";
+  error: string | null;
+};
+
+// Updated initial state with the new TodosState interface
+const initialState: TodosState = {
+  list: [],
+  status: "idle",
+  error: null,
+};
+
+// addMatcher handles different actions from API calls
+const todosSlice = createSlice({
+  name: "todos",
+  initialState,
+  reducers: {},
+  extraReducers: (builder) => {
+    builder
+      .addMatcher(
+        apiSlice.endpoints.getTodos.matchFulfilled,
+        (state, action) => {
+          state.list = action.payload;
+        },
+      )
+      .addMatcher(
+        apiSlice.endpoints.getTodos.matchRejected,
+        (state, action) => {
+          state.status = "failed";
+          state.error = action.error.message ?? null;
+        },
+      );
+  },
+});
+
+export default todosSlice.reducer;
+
+// Helper state selectors
+export const findTodoById = (state: RootState, id: number | string) =>
+  state.todos.list.find((todo) => todo.id === id);
+
+```
+
+- And use the RTK Query in the `TodoList.tsx` element:
+```tsx
+import "./TodoList.css";
+
+import { useMemo } from "react";
+
+import { useGetTodosQuery } from "../../features/api/apiSlice";
+import { TodoComponent } from "./TodoComponent";
+
+export const TodoList = () => {
+  const { data: todos = [], isLoading, isError, error } = useGetTodosQuery();
+
+	// useMemo prevents the sorting function from being called on every render
+  const sortedTodos = useMemo(() => {
+    const sortedTodos = todos.slice();
+    sortedTodos.sort((a, b) => Number(a.id) - Number(b.id));
+
+    return sortedTodos;
+  }, [todos]);
+
+  if (isLoading) return <div>Loading...</div>;
+  if (isError) return <div>{error.toString()}</div>;
+
+  return (
+    <div className="todo-list" data-testid="todo-list">
+      {sortedTodos.map((todo) => (
+        <TodoComponent key={todo.id} todo={todo} />
+      ))}
+    </div>
+  );
+};
+
+```
+
+- Next we need to `update` and `delete` RTK Queries for the other API endpoints in our `apiSlice.ts`:
+```ts
+
 ```
