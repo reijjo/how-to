@@ -613,13 +613,22 @@ export const fetchTodos = createAppAsyncThunk(
 - Adding the new Todos `todosSlice.ts`:
 ```ts
 ...
+interface TodoCreateResponse {
+  data: Todo;
+  ok: boolean;
+  message: string;
+}
+
 type NewTodo = Pick<Todo, "content">;
 ...
 export const addNewTodo = createAppAsyncThunk(
   "todos/addNewTodo",
   async (initialTodo: NewTodo) => {
-    const response = await axios.post<Todo>(`${URL}/api/todos`, initialTodo);
-    return response.data;
+    const response = await axios.post<TodoCreateResponse>(
+      `${URL}/api/todos`,
+      initialTodo,
+    );
+    return response.data.data;
   },
 );
 ...
@@ -646,7 +655,114 @@ export const { updateTodo, deleteTodo } = todosSlice.actions;
 
 - Update the `Homepage.tsx`:
 ```tsx
+...
+export const Homepage = () => {
+  const [todo, setTodo] = useState("");
+  const [addTodoStatus, setAddTodoStatus] = useState<"idle" | "pending">(
+    "idle",
+  );
+	...
+	  const createTodo = async (e: SyntheticEvent) => {
+    e.preventDefault();
 
+    if (addTodoStatus === "pending") return;
+    if (!todo.trim()) return;
+
+    try {
+      setAddTodoStatus("pending");
+      await dispatch(addNewTodo({ content: todo })).unwrap(); // Unwrap only resolves the promise if there is no error
+      setTodo("");
+    } catch (error: unknown) {
+      console.log("Error creating todo", error);
+    } finally {
+      setAddTodoStatus("idle");
+    }
+  };
+	...
+```
+
+- And then we also need update and delete thunks `todosSlice.ts`:
+```ts
+...
+type UpdateTodo = Pick<Todo, "id" | "done">;
+...
+export const updateTodoStatus = createAppAsyncThunk(
+  "todos/updateTodoStatus",
+  async (todo: UpdateTodo) => {
+    const response = await axios.patch<TodoCreateResponse>(
+      `${URL}/api/todos/${todo.id}`,
+      { done: !todo.done },
+    );
+    return response.data.data;
+  },
+);
+
+export const removeTodo = createAppAsyncThunk(
+  "todos/removeTodo",
+  async (id: number | string) => {
+    await axios.delete(`${URL}/api/todos/${id}`);
+    return id;
+  },
+);
+...
+const todosSlice = createSlice({
+  name: "todos",
+  initialState,
+  reducers: {},
+  extraReducers: (builder) => {
+    builder
+		...
+ 			.addCase(updateTodoStatus.fulfilled, (state, action) => {
+        const todo = state.todos.find((todo) => todo.id === action.payload.id);
+        if (todo) {
+          todo.done = action.payload.done;
+        }
+      })
+      .addCase(removeTodo.fulfilled, (state, action) => {
+        state.todos = state.todos.filter((todo) => todo.id !== action.payload);
+      });
+  },
+});
+```
+- And update `TodoComponent.tsx`:
+```tsx
+...
+export const TodoComponent = ({ todo }: TodoComponentProps) => {
+  const [todoStatus, setTodoStatus] = useState<"idle" | "pending">("idle");
+  // Finds the todo by ID
+  const foundTodo = useAppSelector((state) => findTodoById(state, todo.id));
+  const dispatch = useAppDispatch();
+
+  const handleTodoDone = async () => {
+    if (todoStatus === "pending") return;
+    if (!foundTodo) return;
+
+    try {
+      setTodoStatus("pending");
+      await dispatch(
+        updateTodoStatus({ id: foundTodo.id, done: !foundTodo.done }),
+      ).unwrap();
+    } catch (error: unknown) {
+      console.log("Error updating todo", error);
+    } finally {
+      setTodoStatus("idle");
+    }
+  };
+
+  const handleTodoDelete = async () => {
+    if (todoStatus === "pending") return;
+    if (!foundTodo) return;
+
+    try {
+      setTodoStatus("pending");
+      await dispatch(removeTodo(foundTodo.id)).unwrap();
+    } catch (error: unknown) {
+      console.log("Error deleting todo", error);
+    } finally {
+      setTodoStatus("idle");
+    }
+  };
+	...
 ```
 
 
