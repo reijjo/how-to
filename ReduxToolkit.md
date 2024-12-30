@@ -916,7 +916,182 @@ export const TodoList = () => {
 
 ```
 
-- Next we need to `update` and `delete` RTK Queries for the other API endpoints in our `apiSlice.ts`:
+- Next we need to `create`, `update` and `delete` RTK Queries (mutations) for the other API endpoints in our `apiSlice.ts`:
 ```ts
+...
+export const apiSlice = createApi({
+  reducerPath: "api", // The cache reducer expects to be added at `state.api` by default
+  baseQuery: fetchBaseQuery({ baseUrl: `${URL}/api` }), // Base URL for all requests
+  tagTypes: ["Todo"], // Define the tag types for the cache
+  // Define the endpoints
+  endpoints: (builder) => ({
+		...
+		addNewTodo: builder.mutation<Todo, Partial<Todo>>({
+      query: (content) => ({
+        url: "/todos",
+        method: "POST",
+        body: content,
+      }),
+      invalidatesTags: ["Todo"], // Tells the RTK Query that cache data is outdated and makes a refetch
+    }),
+    editTodo: builder.mutation<Todo, Partial<Todo>>({
+      query: (todo) => ({
+        url: `/todos/${todo.id}`,
+        method: "PATCH",
+        body: todo,
+      }),
+      invalidatesTags: ["Todo"], // Tells the RTK Query that cache data is outdated and makes a refetch
+    }),
+    deleteTodo: builder.mutation<void, number>({
+      query: (id) => ({
+        url: `/todos/${id}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: ["Todo"],
+    }),
+  }),
+});
+
+// Export the auto-generated hooks for the API endpoints
+export const {
+  useGetTodosQuery,
+  useGetTodoByIdQuery,
+  useAddNewTodoMutation,
+  useEditTodoMutation,
+  useDeleteTodoMutation,
+} = apiSlice;
+
+```
+- Update `TodoComponent.tsx`:
+```tsx
+import "./TodoComponent.css";
+
+import {
+  useDeleteTodoMutation,
+  useEditTodoMutation,
+} from "../../features/api/apiSlice";
+import { findTodoById } from "../../features/todos/todosSlice";
+import { useAppSelector } from "../../store/hooks";
+import { Todo } from "../../utils/types";
+import { Icon } from "../common/icon/Icon";
+
+interface TodoComponentProps {
+  todo: Todo;
+}
+
+export const TodoComponent = ({ todo }: TodoComponentProps) => {
+  const foundTodo = useAppSelector((state) => findTodoById(state, todo.id));
+  const [updateTodo, { isLoading }] = useEditTodoMutation();
+  const [deleteTodo] = useDeleteTodoMutation();
+
+  console.log("foundTodo", foundTodo);
+
+  const handleTodoDone = async () => {
+    if (!foundTodo) return;
+
+    console.log("update", foundTodo);
+
+    try {
+      await updateTodo({ ...foundTodo, done: !foundTodo.done }).unwrap();
+    } catch (error: unknown) {
+      console.log("Error updating todo", error);
+    }
+  };
+
+  const handleTodoDelete = async () => {
+    if (!foundTodo) return;
+
+    console.log("delete", todo.id);
+
+    try {
+      await deleteTodo(Number(foundTodo.id)).unwrap();
+    } catch (error: unknown) {
+      console.log("Error deleting todo", error);
+    }
+  };
+
+  return (
+    <div className="single-todo">
+      <label className="single-todo-label">
+        <input
+          type="checkbox"
+          className="todo-checkbox"
+          checked={todo.done}
+          onChange={handleTodoDone}
+          name="todo-checkbox"
+          disabled={isLoading}
+        />
+        <a className={`todo-content-wrapper ${todo.done ? "todo-done" : ""}`}>
+          <p className="todo-content">{todo.content}</p>
+        </a>
+      </label>
+      <button
+        className="todo-delete"
+        disabled={!todo.done}
+        onClick={handleTodoDelete}
+      >
+        <Icon name="trash" strokeWidth={2} />
+      </button>
+    </div>
+  );
+};
+
+```
+
+- And `Homepage.tsx`:
+```tsx
+import "./Homepage.css";
+
+import { ChangeEvent, SyntheticEvent, useState } from "react";
+
+import { useAddNewTodoMutation } from "../../features/api/apiSlice";
+// import { addNewTodo } from "../../features/todos/todosSlice";
+// import { useAppDispatch } from "../../store/hooks";
+import { Container, TextInputWithButton } from "../common";
+import { TodoList } from "./TodoList";
+
+export const Homepage = () => {
+  const [todo, setTodo] = useState("");
+  const [addNewTodo, { isLoading }] = useAddNewTodoMutation();
+
+  const handleTodoChange = (e: ChangeEvent<HTMLInputElement>) => {
+    setTodo(e.target.value);
+  };
+
+  const createTodo = async (e: SyntheticEvent) => {
+    e.preventDefault();
+    if (!todo.trim()) return;
+
+    try {
+      await addNewTodo({ content: todo }).unwrap();
+      setTodo("");
+    } catch (error: unknown) {
+      console.log("Error creating todo", error);
+    }
+  };
+
+  return (
+    <main className="wrapper">
+      <div className="align-center">
+        <h1>To-do list</h1>
+        <Container width="min(100%, 600px)" backgroundColor="transparent">
+          <TextInputWithButton
+            label="create todo"
+            name="todo"
+            id="todo"
+            placeholder="What to do..."
+            value={todo}
+            onChange={handleTodoChange}
+            width="75%"
+            buttonText="add"
+            onClick={createTodo}
+            disabled={isLoading}
+          />
+          <TodoList />
+        </Container>
+      </div>
+    </main>
+  );
+};
 
 ```
