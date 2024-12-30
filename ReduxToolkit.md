@@ -1095,3 +1095,43 @@ export const Homepage = () => {
 };
 
 ```
+
+- Update the tags in `apiSlice.ts` to minimize the backend usage:
+```ts
+export const apiSlice = createApi({
+  reducerPath: "api", // The cache reducer expects to be added at `state.api` by default
+  baseQuery: fetchBaseQuery({ baseUrl: `${URL}/api` }), // Base URL for all requests
+  tagTypes: ["Todo"], // Define the tag types for the cache
+  // Define the endpoints
+  endpoints: (builder) => ({
+    // The return value is a `Todo[]` array and it takes no arguments
+    getTodos: builder.query<Todo[], void>({
+      query: () => "/todos", // The endpoint URL
+      providesTags: (result = []) => [
+        "Todo",
+        ...result.map(({ id }) => ({ type: "Todo", id }) as const), // Add tags for each todo item
+      ],
+      // We need the transformResponse because our API returns an object with a `data` key
+      transformResponse: (response: TodosResponse) => {
+        return response.data;
+      },
+    }),
+    getTodoById: builder.query<Todo, number>({
+      query: (id) => `/todos/${id}`,
+      providesTags: (_result, _error, arg) => [{ type: "Todo", id: arg }], // Minimizes the backend usage
+    }),
+    addNewTodo: builder.mutation<Todo, Partial<Todo>>({
+      ...
+      invalidatesTags: ["Todo"], // Tells the RTK Query that cache data is outdated and makes a refetch
+    }),
+    editTodo: builder.mutation<Todo, Partial<Todo>>({
+      ...
+      invalidatesTags: (_result, _error, { id }) => [{ type: "Todo", id }],
+    }),
+    deleteTodo: builder.mutation<void, number>({
+      ...
+      invalidatesTags: (_result, _error, id) => [{ type: "Todo", id }],
+    }),
+  }),
+});
+```
