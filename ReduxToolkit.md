@@ -1045,8 +1045,6 @@ import "./Homepage.css";
 import { ChangeEvent, SyntheticEvent, useState } from "react";
 
 import { useAddNewTodoMutation } from "../../features/api/apiSlice";
-// import { addNewTodo } from "../../features/todos/todosSlice";
-// import { useAppDispatch } from "../../store/hooks";
 import { Container, TextInputWithButton } from "../common";
 import { TodoList } from "./TodoList";
 
