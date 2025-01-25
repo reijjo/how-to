@@ -8,7 +8,7 @@
 ## Frontend
 ### Setting up
 Install packages
-`bun add -d vitest @testing-library/react jsdom @vitejs/plugin-react @testing-library/jest-dom @types/node`
+`bun add -d vitest @testing-library/react jsdom @vitejs/plugin-react @testing-library/jest-dom @testing-library/user-event @types/node`
 
 Create `vitest.setup.ts` file in the root of the frontend folder:
 ```ts
@@ -116,3 +116,70 @@ In the client folder `bun run test` and that's it.
 
 ## End-to-End
 <a href='#top'>Back to top</a>
+
+### Setting up
+- Create new folder for the End-to-End tests (for example `e2e`)
+- Install Playwright with `npm init playwright@latest` command
+- Create `tsconfig.json` in the root of the folder:
+```ts
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "CommonJS",
+    "lib": ["ESNext", "DOM"],
+    "moduleResolution": "Node",
+    "strict": true,
+    "esModuleInterop": true,
+    "types": ["node"],
+    "resolveJsonModule": true,
+    "skipLibCheck": true
+  },
+  "include": ["**/*.ts"]
+}
+```
+- Add scripts to the `package.json` file:
+```json
+{
+  ...
+  "main": "index.js",
+  "scripts": {
+    "test": "playwright test",
+    "test:report": "playwright show-report",
+		"test:ui": "playwright test --ui"
+  },
+  ...
+}
+
+```
+
+- Run the example tests with `npm run test` or `npm run test:report`
+- Or with my favorite `npm rum test:ui`
+
+### First tests
+- Create `tests` folder in the root of the folder
+- Modify `playwright.config.ts` file:
+```ts
+export default defineConfig({
+  testDir: "./tests",
+  ...
+})
+```
+- Create first test into the `tests` folder (`filename.spec.ts`)
+```ts
+import { expect, test } from "@playwright/test";
+
+test.beforeEach(async ({ page }) => {
+  await page.goto("http://localhost:5173");
+});
+
+test.describe("Homepage", () => {
+  test("should display header and form", async ({ page }) => {
+    const header = page.locator("h1");
+    const form = page.locator("form");
+
+    expect(header).toBeVisible();
+    expect(form).toBeVisible();
+  });
+});
+
+```
