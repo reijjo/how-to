@@ -6,7 +6,7 @@
 </div>
 
 ## Frontend
-### Setting up
+### Setting up (vitest)
 Install packages
 `bun add -d vitest @testing-library/react jsdom @vitejs/plugin-react @testing-library/jest-dom @testing-library/user-event @types/node`
 
@@ -111,7 +111,50 @@ Add to package.json:
 
 In the client folder `bun run test` and that's it.
 
+<a href='#top'>Back to top</a>
+
+
 ## Backend
+### Setting up (bun:test)
+- Install packages `bun add -d supertest @types/supertest`
+- Create `tests` folder in the `src` folder -> Create file `app.spec.ts` in the `tests` folder:
+```ts
+import { describe, expect, test } from "bun:test";
+
+import app from "../app";
+import supertest from "supertest";
+
+const api = supertest(app);
+
+describe("APP.TS", () => {
+  test("should return 200", async () => {
+    const res = await api.get("/");
+
+    expect(res.status).toBe(200);
+    expect(res.text).toBe("hello todo");
+  });
+});
+
+```
+- Add test script to `package.json` file:
+```json
+{
+  ...
+  "scripts": {
+    "dev": "NODE_ENV=development bun --watch run src/index.ts",
+    "clean": "rm -rf node_modules .bun bun.lockb **/dist data",
+    "clean:db": "rm -rf data",
+    "test": "NODE_ENV=test bun test",
+    "test:cover": "NODE_ENV=test bun test --coverage"
+  },
+  ...
+}
+
+```
+- Run test with `bun run test` and to see the test coverage run `bun run test:cover`
+
+
+
 <a href='#top'>Back to top</a>
 
 ## End-to-End
